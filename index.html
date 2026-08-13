@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Epigenome Atlas — working demo</title>
+<style>
+:root{
+  --bg:#07080a;
+  --bg-2:#0c0e11;
+  --panel:#101317;
+  --line:rgba(255,255,255,0.08);
+  --line-2:rgba(255,255,255,0.14);
+  --ink:#eceef1;
+  --ink-2:#9aa1a9;
+  --ink-3:#646b73;
+  --accent:#5b8cff;
+  --accent-2:#9085e9;
+  --teal:#33c8b0;
+  --amber:#e8a33d;
+  --rose:#e0607e;
+  /* AlphaFold pLDDT convention */
+  --pl-vhigh:#0053D6; --pl-high:#65CBF3; --pl-low:#FFDB13; --pl-vlow:#FF7D45;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Söhne","Inter",system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+  letter-spacing:-0.005em;
+}
+a{color:inherit}
+button{font:inherit;color:inherit}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12.5px;letter-spacing:0}
+
+/* ---------- ambient field ---------- */
+#field{position:fixed;inset:0;z-index:0;opacity:.5}
+.veil{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(1100px 620px at 50% -12%,rgba(91,140,255,.13),transparent 62%),
+             radial-gradient(760px 520px at 88% 108%,rgba(144,133,233,.10),transparent 60%);}
+.shell{position:relative;z-index:2}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky;top:0;z-index:20;backdrop-filter:blur(14px);
+  background:rgba(7,8,10,.72);border-bottom:1px solid var(--line);
+}
+.topbar .in{max-width:1280px;margin:0 auto;padding:13px 26px;display:flex;align-items:center;gap:20px}
+.mark{display:flex;align-items:center;gap:11px;font-size:13.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink)}
+.glyph{width:19px;height:19px;flex:none}
+.topbar .sp{flex:1}
+.minisearch{
+  display:none;align-items:center;gap:9px;border:1px solid var(--line-2);border-radius:8px;
+  padding:7px 13px;background:rgba(255,255,255,.03);min-width:290px
+}
+.minisearch input{background:none;border:0;outline:none;color:var(--ink);font:inherit;font-size:14px;flex:1}
+.minisearch input::placeholder{color:var(--ink-3)}
+.topbar.scrolled .minisearch{display:flex}
+.tlink{font-size:13.5px;color:var(--ink-2);text-decoration:none}
+
+/* ---------- hero ---------- */
+.hero{max-width:1280px;margin:0 auto;padding:104px 26px 76px;text-align:center}
+.eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-3);margin-bottom:26px}
+.hero h1{
+  font-size:clamp(38px,5.6vw,68px);line-height:1.04;font-weight:300;letter-spacing:-0.035em;
+  margin:0 0 20px;
+}
+.hero h1 em{font-style:normal;color:var(--ink-2)}
+.hero p.lede{max-width:600px;margin:0 auto 42px;color:var(--ink-2);font-size:17px;font-weight:300}
+.bigsearch{
+  max-width:660px;margin:0 auto;display:flex;align-items:center;gap:14px;
+  border:1px solid var(--line-2);border-radius:12px;padding:16px 20px;
+  background:rgba(255,255,255,.035);transition:border-color .2s, background .2s;
+}
+.bigsearch:focus-within{border-color:rgba(91,140,255,.55);background:rgba(91,140,255,.06)}
+.bigsearch input{flex:1;background:none;border:0;outline:none;color:var(--ink);font:inherit;font-size:17px;font-weight:300}
+.bigsearch input::placeholder{color:var(--ink-3)}
+.bigsearch button{
+  border:0;background:var(--accent);color:#07080a;font-weight:600;font-size:14px;
+  border-radius:8px;padding:9px 18px;cursor:pointer
+}
+.examples{margin-top:22px;display:flex;gap:9px;justify-content:center;flex-wrap:wrap}
+.ex{
+  border:1px solid var(--line);background:rgba(255,255,255,.02);color:var(--ink-2);
+  border-radius:999px;padding:7px 15px;font-size:13.5px;cursor:pointer;transition:.16s
+}
+.ex:hover{border-color:var(--line-2);color:var(--ink);background:rgba(255,255,255,.05)}
+.suggest{max-width:660px;margin:10px auto 0;text-align:left;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel);overflow:hidden;display:none}
+.suggest.on{display:block}
+.sg{padding:11px 18px;cursor:pointer;display:flex;gap:12px;align-items:baseline;border-bottom:1px solid var(--line)}
+.sg:last-child{border-bottom:0}
+.sg:hover{background:rgba(255,255,255,.04)}
+.sg .sym{font-weight:500}
+.sg .cls{font-size:12.5px;color:var(--ink-3)}
+
+/* ---------- entity view ---------- */
+.entity{display:none;max-width:1280px;margin:0 auto;padding:26px 26px 90px}
+.entity.on{display:block}
+.crumb{display:flex;align-items:center;gap:10px;color:var(--ink-3);font-size:13px;margin-bottom:20px}
+.crumb button{background:none;border:0;color:var(--ink-2);cursor:pointer;padding:0;font-size:13px}
+.ehead{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap;padding-bottom:26px;border-bottom:1px solid var(--line)}
+.ehead h2{font-size:clamp(30px,4vw,46px);font-weight:300;letter-spacing:-0.03em;margin:0}
+.ehead .full{color:var(--ink-2);font-weight:300;font-size:16px;max-width:520px}
+.tag{border:1px solid var(--line-2);border-radius:6px;padding:3px 10px;font-size:12px;color:var(--ink-2)}
+.tag.w{border-color:rgba(91,140,255,.5);color:#9dbcff}
+.tag.e{border-color:rgba(51,200,176,.45);color:#7fe0d0}
+.tag.r{border-color:rgba(144,133,233,.5);color:#b6aef2}
+
+/* lens tabs */
+.lenses{display:flex;gap:2px;margin:22px 0 26px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.lens{
+  background:none;border:0;border-bottom:2px solid transparent;color:var(--ink-3);
+  padding:11px 16px;cursor:pointer;font-size:14px;position:relative;white-space:nowrap
+}
+.lens[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.lens:disabled{opacity:.4;cursor:not-allowed}
+.lens .soon{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-left:7px;
+  border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.pane{display:none}
+.pane.on{display:block}
+
+/* ---------- structure lens ---------- */
+.sgrid{display:grid;grid-template-columns:1fr 320px;gap:22px;align-items:start}
+.viewer{
+  position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  background:radial-gradient(700px 460px at 50% 42%,#0f1319,#08090b 72%);height:520px
+}
+#mol{display:block;width:100%;height:100%;cursor:grab}
+#mol:active{cursor:grabbing}
+.vstate{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;text-align:center;padding:36px;color:var(--ink-2);font-size:14px
+}
+.vstate h4{margin:0;color:var(--ink);font-weight:400;font-size:16px}
+.vstate.hidden{display:none}
+.spinner{width:26px;height:26px;border:2px solid var(--line-2);border-top-color:var(--accent);
+  border-radius:50%;animation:sp 0.9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.vtools{position:absolute;left:14px;top:14px;display:flex;gap:7px;flex-wrap:wrap}
+.vtool{
+  border:1px solid var(--line-2);background:rgba(8,10,13,.7);backdrop-filter:blur(8px);
+  color:var(--ink-2);border-radius:7px;padding:6px 11px;font-size:12.5px;cursor:pointer
+}
+.vtool[aria-pressed="true"]{color:var(--ink);border-color:rgba(91,140,255,.6);background:rgba(91,140,255,.14)}
+.vmeta{position:absolute;right:14px;bottom:14px;text-align:right;font-size:11.5px;color:var(--ink-3)}
+.plddt{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel)}
+.plddt h5, .side h5{margin:0 0 12px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.plrow{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-2);margin-bottom:7px}
+.sw{width:22px;height:9px;border-radius:2px;flex:none}
+.side{border:1px solid var(--line);border-radius:12px;padding:16px 18px;background:var(--panel);margin-top:14px}
+.kv{display:flex;justify-content:space-between;gap:14px;font-size:13.5px;padding:7px 0;border-bottom:1px solid var(--line)}
+.kv:last-child{border-bottom:0}
+.kv .k{color:var(--ink-3)}
+.kv .v{text-align:right}
+.pdbin{display:flex;gap:8px;margin-top:10px}
+.pdbin input{flex:1;background:rgba(255,255,255,.03);border:1px solid var(--line-2);border-radius:7px;
+  padding:8px 11px;color:var(--ink);font:inherit;font-size:13.5px;outline:none}
+.pdbin button{border:1px solid var(--line-2);background:rgba(255,255,255,.05);border-radius:7px;padding:8px 13px;
+  font-size:13px;cursor:pointer;color:var(--ink-2)}
+
+/* evidence dot */
+.ed{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;
+  border:1px solid rgba(91,140,255,.55);margin-left:6px;cursor:help;position:relative;vertical-align:middle;flex:none}
+.ed::after{content:"";width:4px;height:4px;border-radius:50%;background:var(--accent)}
+.ed .pop{
+  display:none;position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);
+  width:290px;background:#141920;border:1px solid var(--line-2);border-radius:9px;padding:11px 13px;
+  font-size:12.5px;line-height:1.5;color:var(--ink-2);text-align:left;z-index:40;
+  box-shadow:0 14px 40px rgba(0,0,0,.6)
+}
+.ed:hover .pop,.ed:focus-visible .pop{display:block}
+.ed .pop b{color:var(--ink);font-weight:500}
+
+/* ---------- mechanism lens ---------- */
+.mgrid{display:grid;grid-template-columns:1fr 330px;gap:22px;align-items:start}
+.stage{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#0d1015,#08090b);position:relative}
+#mech{display:block;width:100%;height:400px}
+.schembar{
+  display:flex;gap:10px;align-items:flex-start;padding:11px 16px;border-top:1px solid var(--line);
+  font-size:12.5px;color:var(--ink-3);background:rgba(232,163,61,.05)
+}
+.schembar b{color:var(--amber);font-weight:600}
+.transport{display:flex;align-items:center;gap:12px;padding:13px 16px;border-top:1px solid var(--line)}
+.tbtn{border:1px solid var(--line-2);background:rgba(255,255,255,.04);border-radius:8px;
+  width:36px;height:34px;cursor:pointer;display:grid;place-items:center}
+.rail{flex:1;display:flex;gap:3px}
+.seg{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.10);cursor:pointer;position:relative}
+.seg i{position:absolute;inset:0;width:0;background:var(--accent);border-radius:2px}
+.seg.done i{width:100%}
+.steplist{border:1px solid var(--line);border-radius:12px;background:var(--panel);overflow:hidden}
+.step{padding:13px 16px;border-bottom:1px solid var(--line);cursor:pointer;transition:.15s}
+.step:last-child{border-bottom:0}
+.step:hover{background:rgba(255,255,255,.03)}
+.step[aria-current="true"]{background:rgba(91,140,255,.09);box-shadow:inset 2px 0 0 var(--accent)}
+.step .n{font-size:11px;color:var(--ink-3);letter-spacing:.1em}
+.step .t{font-size:14px;margin:2px 0 3px}
+.step .d{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.step[aria-current="true"] .t{color:var(--ink)}
+
+/* footer */
+.foot{max-width:1280px;margin:0 auto;padding:34px 26px 60px;border-top:1px solid var(--line);
+  color:var(--ink-3);font-size:12.5px;display:flex;gap:26px;flex-wrap:wrap}
+@media (max-width:980px){
+  .sgrid,.mgrid{grid-template-columns:1fr}
+  .viewer{height:400px}
+}
+</style>
+</head>
+<body>
+<canvas id="field"></canvas>
+<div class="veil"></div>
+
+<div class="shell">
+  <!-- TOP BAR -->
+  <div class="topbar" id="topbar">
+    <div class="in">
+      <div class="mark">
+        <svg class="glyph" viewBox="0 0 24 24" fill="none">
+          <rect x="2.5" y="2.5" width="8" height="8" rx="1.4" stroke="#5b8cff" stroke-width="1.4"/>
+          <rect x="13.5" y="6" width="8" height="8" rx="1.4" stroke="#9085e9" stroke-width="1.4"/>
+          <rect x="6" y="13.5" width="8" height="8" rx="1.4" stroke="#33c8b0" stroke-width="1.4"/>
+        </svg>
+        Epigenome Atlas
+      </div>
+      <div class="minisearch">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#646b73" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="miniq" placeholder="Search a protein, mark or compound" aria-label="Search">
+      </div>
+      <div class="sp"></div>
+      <span class="tlink mono">demo build</span>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <div class="eyebrow">Chromatin regulators · pan-cancer</div>
+    <h1>Look at the machinery<br><em>that decides which genes are read.</em></h1>
+    <p class="lede">Predicted structures, catalytic mechanism and downstream consequence for the writers, erasers and readers of the epigenome — assembled from public structural and literature databases.</p>
+
+    <div class="bigsearch">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#646b73" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" placeholder="Search a protein — EZH2, EHMT2, DNMT3A, KDM6A…" autocomplete="off" aria-label="Search a protein">
+      <button id="go">Search</button>
+    </div>
+    <div class="suggest" id="suggest"></div>
+
+    <div class="examples" id="examples"></div>
+  </section>
+
+  <!-- ENTITY -->
+  <section class="entity" id="entity">
+    <div class="crumb"><button id="back">← All regulators</button><span>/</span><span id="crumbName" class="mono"></span></div>
+
+    <div class="ehead">
+      <h2 id="eSym"></h2>
+      <div class="full" id="eFull"></div>
+      <div style="display:flex;gap:7px;margin-left:auto;flex-wrap:wrap" id="eTags"></div>
+    </div>
+
+    <div class="lenses" role="tablist">
+      <button class="lens" role="tab" aria-selected="true" data-pane="structure">Structure</button>
+      <button class="lens" role="tab" aria-selected="false" data-pane="mechanism">Mechanism</button>
+      <button class="lens" role="tab" aria-selected="false" disabled>Structure neighbourhood<span class="soon">full build</span></button>
+      <button class="lens" role="tab" aria-selected="false" disabled>Chromatin<span class="soon">full build</span></button>
+      <button class="lens" role="tab" aria-selected="false" disabled>Cancer landscape<span class="soon">full build</span></button>
+      <button class="lens" role="tab" aria-selected="false" disabled>Compounds<span class="soon">full build</span></button>
+    </div>
+
+    <!-- STRUCTURE PANE -->
+    <div class="pane on" id="pane-structure">
+      <div class="sgrid">
+        <div class="viewer">
+          <canvas id="mol"></canvas>
+          <div class="vstate" id="vstate">
+            <div class="spinner"></div>
+            <h4>Resolving accession…</h4>
+            <div id="vmsg">UniProt → AlphaFold DB</div>
+          </div>
+          <div class="vtools">
+            <button class="vtool" id="tSpin" aria-pressed="true">Spin</button>
+            <button class="vtool" id="tColor" aria-pressed="true">Colour: pLDDT</button>
+            <button class="vtool" id="tReset">Reset view</button>
+          </div>
+          <div class="vmeta mono" id="vmeta"></div>
+        </div>
+
+        <div>
+          <div class="plddt">
+            <h5>Model confidence · pLDDT</h5>
+            <div class="plrow"><span class="sw" style="background:var(--pl-vhigh)"></span> Very high · 90–100</div>
+            <div class="plrow"><span class="sw" style="background:var(--pl-high)"></span> Confident · 70–90</div>
+            <div class="plrow"><span class="sw" style="background:var(--pl-low)"></span> Low · 50–70</div>
+            <div class="plrow"><span class="sw" style="background:var(--pl-vlow)"></span> Very low · under 50</div>
+            <div style="font-size:12px;color:var(--ink-3);margin-top:12px;line-height:1.5">
+              Colours are the AlphaFold DB convention. Low-confidence regions are frequently intrinsically disordered — absence of a fold here is information, not error.
+            </div>
+          </div>
+
+          <div class="side">
+            <h5>Model</h5>
+            <div class="kv"><span class="k">Source</span><span class="v" id="mSource">—</span></div>
+            <div class="kv"><span class="k">Accession</span><span class="v mono" id="mAcc">—</span></div>
+            <div class="kv"><span class="k">Residues rendered</span><span class="v mono" id="mRes">—</span></div>
+            <div class="kv"><span class="k">Mean pLDDT</span><span class="v mono" id="mPl">—</span></div>
+            <div class="kv"><span class="k">Representation</span><span class="v">Cα trace, spline-smoothed</span></div>
+          </div>
+
+          <div class="side">
+            <h5>Experimental structure</h5>
+            <div style="font-size:12.5px;color:var(--ink-2);line-height:1.5">
+              Load any entry from the RCSB PDB to see a solved structure instead of a prediction — including ones with an inhibitor bound.
+            </div>
+            <div class="pdbin">
+              <input id="pdbid" placeholder="PDB ID, e.g. 4MI0" aria-label="PDB ID">
+              <button id="pdbgo">Load</button>
+            </div>
+            <div style="font-size:11.5px;color:var(--ink-3);margin-top:9px">
+              I have not verified any specific PDB ID for you — search RCSB and paste one. If it does not exist or cannot be reached, the viewer will say so rather than showing you something else.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MECHANISM PANE -->
+    <div class="pane" id="pane-mechanism">
+      <div class="mgrid">
+        <div>
+          <div class="stage">
+            <canvas id="mech"></canvas>
+            <div class="transport">
+              <button class="tbtn" id="mPrev" aria-label="Previous step">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 5 8 12l7 7"/></svg>
+              </button>
+              <button class="tbtn" id="mPlay" aria-label="Play or pause">
+                <svg id="icPause" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+                <svg id="icPlay" style="display:none" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l13 8-13 8z"/></svg>
+              </button>
+              <button class="tbtn" id="mNext" aria-label="Next step">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 5 7 7-7 7"/></svg>
+              </button>
+              <div class="rail" id="rail"></div>
+            </div>
+            <div class="schembar">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--amber);flex:none;margin-top:2px"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+              <div><b>Schematic — not a simulation.</b> Shapes and positions are diagrammatic. Nothing here is molecular dynamics, docking or a structural prediction. What is asserted is the <em>sequence of events</em>, and each step carries its own citation.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="steplist" id="steplist"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <span>Structures: AlphaFold DB (EMBL-EBI) and RCSB PDB · Accessions: UniProt</span>
+    <span>Demo build — two lenses working, four stubbed</span>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   Ambient field — reconfiguring blocks (identity motif)
+   ========================================================= */
+(function(){
+  const c=document.getElementById('field'),x=c.getContext('2d');
+  let W,H,blocks=[];
+  const HUES=['91,140,255','144,133,233','51,200,176'];
+  function init(){
+    W=c.width=innerWidth*devicePixelRatio; H=c.height=innerHeight*devicePixelRatio;
+    c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px';
+    blocks=[];
+    const n=Math.round(innerWidth/34);
+    for(let i=0;i<n;i++){
+      const s=(14+Math.random()*30)*devicePixelRatio;
+      blocks.push({x:Math.random()*W,y:Math.random()*H,s,
+        tx:Math.random()*W,ty:Math.random()*H,
+        h:HUES[i%3],a:0.05+Math.random()*0.09,sp:0.0006+Math.random()*0.0016,r:Math.random()*Math.PI});
+    }
+  }
+  function frame(t){
+    x.clearRect(0,0,W,H);
+    for(const b of blocks){
+      b.x+=(b.tx-b.x)*b.sp; b.y+=(b.ty-b.y)*b.sp; b.r+=0.0011;
+      if(Math.abs(b.tx-b.x)<8*devicePixelRatio){b.tx=Math.random()*W;b.ty=Math.random()*H}
+      x.save(); x.translate(b.x,b.y); x.rotate(b.r);
+      x.strokeStyle='rgba('+b.h+','+b.a+')'; x.lineWidth=1*devicePixelRatio;
+      const r=4*devicePixelRatio;
+      x.beginPath();
+      x.moveTo(-b.s/2+r,-b.s/2); x.arcTo(b.s/2,-b.s/2,b.s/2,b.s/2,r);
+      x.arcTo(b.s/2,b.s/2,-b.s/2,b.s/2,r); x.arcTo(-b.s/2,b.s/2,-b.s/2,-b.s/2,r);
+      x.arcTo(-b.s/2,-b.s/2,b.s/2,-b.s/2,r); x.closePath(); x.stroke();
+      x.restore();
+    }
+    requestAnimationFrame(frame);
+  }
+  init(); addEventListener('resize',init); requestAnimationFrame(frame);
+})();
+
+/* =========================================================
+   Catalogue — gene symbols only. Accessions are RESOLVED at
+   runtime from UniProt; none are asserted by this file.
+   ========================================================= */
+const CATALOGUE=[
+  {s:'EZH2',  c:'Writer', m:'H3K27me3'},
+  {s:'EHMT2', c:'Writer', m:'H3K9me1/me2'},
+  {s:'EHMT1', c:'Writer', m:'H3K9me1/me2'},
+  {s:'SUZ12', c:'Complex',m:'PRC2 subunit'},
+  {s:'EED',   c:'Reader', m:'PRC2 subunit'},
+  {s:'KDM6A', c:'Eraser', m:'H3K27me3'},
+  {s:'KDM6B', c:'Eraser', m:'H3K27me3'},
+  {s:'KDM1A', c:'Eraser', m:'H3K4me1/me2'},
+  {s:'DNMT1', c:'Writer', m:'5-methylcytosine'},
+  {s:'DNMT3A',c:'Writer', m:'5-methylcytosine'},
+  {s:'DNMT3B',c:'Writer', m:'5-methylcytosine'},
+  {s:'TET2',  c:'Eraser', m:'5mC → 5hmC'},
+  {s:'SETD2', c:'Writer', m:'H3K36me3'},
+  {s:'SETDB1',c:'Writer', m:'H3K9me3'},
+  {s:'NSD2',  c:'Writer', m:'H3K36me2'},
+  {s:'DOT1L', c:'Writer', m:'H3K79me2'},
+  {s:'KMT2A', c:'Writer', m:'H3K4me3'},
+  {s:'KMT2D', c:'Writer', m:'H3K4me1'},
+  {s:'HDAC1', c:'Eraser', m:'histone acetyl'},
+  {s:'EP300', c:'Writer', m:'H3K27ac'},
+  {s:'CREBBP',c:'Writer', m:'H3K27ac'},
+  {s:'BRD4',  c:'Reader', m:'acetyl-lysine'},
+  {s:'SMARCA4',c:'Complex',m:'BAF remodeller'},
+  {s:'SMARCB1',c:'Complex',m:'BAF remodeller'},
+  {s:'ARID1A',c:'Complex',m:'BAF remodeller'},
+  {s:'IDH1',  c:'Metabolic',m:'2-HG / TET inhibition'},
+  {s:'IDH2',  c:'Metabolic',m:'2-HG / TET inhibition'},
+];
+const TAGCLASS={Writer:'w',Eraser:'e',Reader:'r',Complex:'',Metabolic:''};
+
+/* example chips */
+(function(){
+  const wrap=document.getElementById('examples');
+  ['EZH2','EHMT2','DNMT3A','KDM6A','BRD4','SMARCB1'].forEach(s=>{
+    const b=document.createElement('button'); b.className='ex'; b.textContent=s;
+    b.onclick=()=>open_(s); wrap.appendChild(b);
+  });
+})();
+
+/* typeahead */
+const q=document.getElementById('q'), suggest=document.getElementById('suggest');
+function renderSuggest(v){
+  const t=v.trim().toUpperCase();
+  if(!t){suggest.classList.remove('on');suggest.innerHTML='';return}
+  const hits=CATALOGUE.filter(e=>e.s.startsWith(t)||e.m.toUpperCase().includes(t)).slice(0,6);
+  if(!hits.length){
+    suggest.innerHTML='<div class="sg"><span class="cls">Not in this demo’s catalogue. The full build resolves any UniProt entry.</span></div>';
+    suggest.classList.add('on'); return;
+  }
+  suggest.innerHTML='';
+  hits.forEach(h=>{
+    const d=document.createElement('div'); d.className='sg';
+    const a=document.createElement('span'); a.className='sym'; a.textContent=h.s;
+    const b=document.createElement('span'); b.className='cls'; b.textContent=h.c+' · '+h.m;
+    d.append(a,b); d.onclick=()=>open_(h.s); suggest.appendChild(d);
+  });
+  suggest.classList.add('on');
+}
+q.addEventListener('input',e=>renderSuggest(e.target.value));
+q.addEventListener('keydown',e=>{if(e.key==='Enter'){const t=q.value.trim().toUpperCase();if(t)open_(t)}});
+document.getElementById('go').onclick=()=>{const t=q.value.trim().toUpperCase();if(t)open_(t)};
+document.getElementById('miniq').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const t=e.target.value.trim().toUpperCase();if(t)open_(t)}});
+addEventListener('scroll',()=>document.getElementById('topbar')
+  .classList.toggle('scrolled',scrollY>200));
+
+/* =========================================================
+   Entity routing
+   ========================================================= */
+const hero=document.getElementById('hero'), entity=document.getElementById('entity');
+document.getElementById('back').onclick=()=>{entity.classList.remove('on');hero.style.display='';scrollTo(0,0)};
+
+function open_(sym){
+  const meta=CATALOGUE.find(e=>e.s===sym)||{s:sym,c:'—',m:'—'};
+  hero.style.display='none'; entity.classList.add('on'); suggest.classList.remove('on');
+  document.getElementById('crumbName').textContent=sym;
+  document.getElementById('eSym').textContent=sym;
+  document.getElementById('eFull').textContent='Resolving from UniProt…';
+  const tags=document.getElementById('eTags'); tags.innerHTML='';
+  const t1=document.createElement('span'); t1.className='tag '+(TAGCLASS[meta.c]||''); t1.textContent=meta.c;
+  const t2=document.createElement('span'); t2.className='tag'; t2.textContent=meta.m;
+  tags.append(t1,t2);
+  scrollTo(0,0);
+  loadStructure(sym);
+  resetMech();
+}
+
+/* lens tabs */
+document.querySelectorAll('.lens').forEach(b=>{
+  b.onclick=()=>{
+    if(b.disabled) return;
+    document.querySelectorAll('.lens').forEach(o=>o.setAttribute('aria-selected','false'));
+    b.setAttribute('aria-selected','true');
+    document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
+    document.getElementById('pane-'+b.dataset.pane).classList.add('on');
+    if(b.dataset.pane==='mechanism'){sizeMech();}
+    else {sizeMol();}
+  };
+});
+
+/* =========================================================
+   STRUCTURE — resolve, fetch, parse, render
+   ========================================================= */
+const molC=document.getElementById('mol'), molX=molC.getContext('2d');
+const vstate=document.getElementById('vstate'), vmsg=document.getElementById('vmsg');
+let CA=[], yaw=0.6, pitch=0.15, zoom=1, spin=true, byPl=true, drag=null;
+
+function setState(title,msg,busy){
+  vstate.classList.remove('hidden');
+  vstate.innerHTML = (busy?'<div class="spinner"></div>':'') +
+    '<h4></h4><div id="vmsg" style="max-width:420px"></div>';
+  vstate.querySelector('h4').textContent=title;
+  vstate.querySelector('#vmsg').textContent=msg;
+}
+function clearState(){vstate.classList.add('hidden')}
+
+async function loadStructure(sym){
+  CA=[]; setState('Resolving accession…','UniProt → AlphaFold DB',true);
+  document.getElementById('mSource').textContent='—';
+  document.getElementById('mAcc').textContent='—';
+  document.getElementById('mRes').textContent='—';
+  document.getElementById('mPl').textContent='—';
+  document.getElementById('vmeta').textContent='';
+
+  let acc=null, desc=null;
+  try{
+    const u='https://rest.uniprot.org/uniprotkb/search?query=gene_exact:'+encodeURIComponent(sym)+
+            '+AND+organism_id:9606+AND+reviewed:true&fields=accession,protein_name&format=json&size=1';
+    const r=await fetch(u);
+    if(!r.ok) throw new Error('UniProt HTTP '+r.status);
+    const j=await r.json();
+    if(!j.results||!j.results.length) throw new Error('no reviewed human entry');
+    acc=j.results[0].primaryAccession;
+    desc=j.results[0].proteinDescription?.recommendedName?.fullName?.value||null;
+  }catch(err){
+    setState('Could not resolve this symbol',
+      'UniProt could not be reached from this page ('+err.message+'). Nothing is shown rather than a guessed structure. In the deployed app this call runs server-side, where it is not subject to browser network restrictions.',false);
+    return;
+  }
+
+  document.getElementById('eFull').textContent=desc||'—';
+  document.getElementById('mAcc').textContent=acc;
+  setState('Fetching predicted model…','AlphaFold DB · '+acc,true);
+
+  let pdbText=null;
+  try{
+    const r=await fetch('https://alphafold.ebi.ac.uk/api/prediction/'+acc);
+    if(r.ok){
+      const j=await r.json();
+      if(j&&j.length&&j[0].pdbUrl){
+        const p=await fetch(j[0].pdbUrl);
+        if(p.ok) pdbText=await p.text();
+      }
+    }
+  }catch(e){/* fall through */}
+  if(!pdbText){
+    try{
+      const p=await fetch('https://alphafold.ebi.ac.uk/files/AF-'+acc+'-F1-model_v4.pdb');
+      if(p.ok) pdbText=await p.text();
+    }catch(e){}
+  }
+  if(!pdbText){
+    setState('No model loaded',
+      'AlphaFold DB could not be reached from this page, or has no model for '+acc+'. Nothing is drawn. An empty viewer is the correct answer here — a placeholder molecule would be a lie.',false);
+    return;
+  }
+  ingest(pdbText,'AlphaFold DB (predicted)');
+}
+
+async function loadPDB(id){
+  id=id.trim().toUpperCase();
+  if(!/^[0-9A-Z]{4}$/.test(id)){setState('Not a PDB ID','A PDB ID is four characters, e.g. 4MI0.',false);return}
+  setState('Fetching experimental structure…','RCSB PDB · '+id,true);
+  try{
+    const r=await fetch('https://files.rcsb.org/download/'+id+'.pdb');
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const t=await r.text();
+    document.getElementById('mAcc').textContent=id;
+    ingest(t,'RCSB PDB (experimental)');
+  }catch(err){
+    setState('Entry not loaded','RCSB returned '+err.message+' for '+id+'. Either the ID does not exist or this page cannot reach RCSB. Nothing is substituted.',false);
+  }
+}
+document.getElementById('pdbgo').onclick=()=>loadPDB(document.getElementById('pdbid').value);
+document.getElementById('pdbid').addEventListener('keydown',e=>{if(e.key==='Enter')loadPDB(e.target.value)});
+
+function ingest(text,sourceLabel){
+  const pts=[];
+  const lines=text.split('\n');
+  for(const L of lines){
+    if(L.startsWith('ATOM')&&L.substr(12,4)===' CA '){
+      const alt=L[16];
+      if(alt!==' '&&alt!=='A') continue;
+      pts.push({
+        x:parseFloat(L.substr(30,8)),y:parseFloat(L.substr(38,8)),z:parseFloat(L.substr(46,8)),
+        b:parseFloat(L.substr(60,6)), ch:L[21]
+      });
+    }
+  }
+  if(pts.length<4){
+    setState('No backbone found','The file loaded but contained fewer than four Cα atoms. Nothing is drawn.',false);
+    return;
+  }
+  // centre + scale
+  let cx=0,cy=0,cz=0;
+  pts.forEach(p=>{cx+=p.x;cy+=p.y;cz+=p.z});
+  cx/=pts.length;cy/=pts.length;cz/=pts.length;
+  let maxr=0;
+  pts.forEach(p=>{p.x-=cx;p.y-=cy;p.z-=cz;maxr=Math.max(maxr,Math.hypot(p.x,p.y,p.z))});
+  const k=1/maxr;
+  pts.forEach(p=>{p.x*=k;p.y*=k;p.z*=k});
+
+  // spline-smooth per chain
+  CA=[];
+  let chain=[],cur=pts[0].ch;
+  const flush=()=>{ if(chain.length>3) CA.push(smooth(chain)); chain=[]; };
+  for(const p of pts){ if(p.ch!==cur){flush();cur=p.ch} chain.push(p) }
+  flush();
+
+  const mean=pts.reduce((a,p)=>a+p.b,0)/pts.length;
+  const isAF=sourceLabel.indexOf('AlphaFold')===0;
+  document.getElementById('mSource').textContent=sourceLabel;
+  document.getElementById('mRes').textContent=pts.length;
+  document.getElementById('mPl').textContent=isAF?mean.toFixed(1):'n/a (B-factor)';
+  document.getElementById('vmeta').textContent=sourceLabel+' · '+pts.length+' residues · '+CA.length+' chain'+(CA.length>1?'s':'');
+  document.getElementById('tColor').textContent = isAF ? 'Colour: pLDDT' : 'Colour: B-factor';
+  yaw=0.6;pitch=0.15;zoom=1;
+  clearState(); sizeMol();
+}
+
+function smooth(ch){
+  const out=[];
+  const N=ch.length, SUB=5;
+  const g=i=>ch[Math.max(0,Math.min(N-1,i))];
+  for(let i=0;i<N-1;i++){
+    const p0=g(i-1),p1=g(i),p2=g(i+1),p3=g(i+2);
+    for(let s=0;s<SUB;s++){
+      const t=s/SUB,t2=t*t,t3=t2*t;
+      out.push({
+        x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+        y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
+        z:0.5*((2*p1.z)+(-p0.z+p2.z)*t+(2*p0.z-5*p1.z+4*p2.z-p3.z)*t2+(-p0.z+3*p1.z-3*p2.z+p3.z)*t3),
+        b:p1.b+(p2.b-p1.b)*t
+      });
+    }
+  }
+  return out;
+}
+
+function plColour(b){
+  if(b>=90) return [0,83,214];
+  if(b>=70) return [101,203,243];
+  if(b>=50) return [255,219,19];
+  return [255,125,69];
+}
+function chainColour(i){
+  const P=[[91,140,255],[217,89,38],[25,158,112],[201,133,0],[213,81,129],[144,133,233]];
+  return P[i%P.length];
+}
+
+function sizeMol(){
+  const r=molC.parentElement.getBoundingClientRect();
+  molC.width=r.width*devicePixelRatio; molC.height=r.height*devicePixelRatio;
+  molC.style.width=r.width+'px'; molC.style.height=r.height+'px';
+}
+addEventListener('resize',()=>{sizeMol();sizeMech()});
+
+molC.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};molC.setPointerCapture(e.pointerId)});
+molC.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  yaw+=(e.clientX-drag.x)*0.008; pitch+=(e.clientY-drag.y)*0.008;
+  pitch=Math.max(-1.4,Math.min(1.4,pitch)); drag={x:e.clientX,y:e.clientY};
+});
+addEventListener('pointerup',()=>drag=null);
+molC.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.5,Math.min(3.2,zoom*(e.deltaY>0?0.92:1.08)))},{passive:false});
+document.getElementById('tSpin').onclick=e=>{spin=!spin;e.currentTarget.setAttribute('aria-pressed',spin)};
+document.getElementById('tColor').onclick=e=>{byPl=!byPl;e.currentTarget.setAttribute('aria-pressed',byPl)};
+document.getElementById('tReset').onclick=()=>{yaw=0.6;pitch=0.15;zoom=1};
+
+function drawMol(){
+  const W=molC.width,H=molC.height;
+  molX.clearRect(0,0,W,H);
+  if(CA.length){
+    if(spin&&!drag) yaw+=0.0032;
+    const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+    const R=Math.min(W,H)*0.40*zoom, ox=W/2, oy=H/2;
+    const segs=[];
+    CA.forEach((ch,ci)=>{
+      let prev=null;
+      for(const p of ch){
+        const x1=p.x*cy - p.z*sy, z1=p.x*sy + p.z*cy;
+        const y2=p.y*cp - z1*sp, z2=p.y*sp + z1*cp;
+        const cur={sx:ox+x1*R, sy:oy+y2*R, z:z2, b:p.b, ci};
+        if(prev) segs.push([prev,cur]);
+        prev=cur;
+      }
+    });
+    segs.sort((a,b)=>(a[0].z+a[1].z)-(b[0].z+b[1].z));
+    const lw=Math.max(1.6,3.4*devicePixelRatio*zoom);
+    molX.lineCap='round';molX.lineJoin='round';
+    for(const [a,b] of segs){
+      const z=(a.z+b.z)/2;
+      const fog=Math.max(0.18,Math.min(1,(z+1.15)/2.1));
+      const c=byPl?plColour((a.b+b.b)/2):chainColour(a.ci);
+      molX.strokeStyle='rgba('+Math.round(c[0]*fog)+','+Math.round(c[1]*fog)+','+Math.round(c[2]*fog)+','+(0.42+fog*0.58)+')';
+      molX.lineWidth=lw*(0.62+fog*0.6);
+      molX.beginPath();molX.moveTo(a.sx,a.sy);molX.lineTo(b.sx,b.sy);molX.stroke();
+    }
+  }
+  requestAnimationFrame(drawMol);
+}
+requestAnimationFrame(drawMol);
+
+/* =========================================================
+   MECHANISM THEATRE
+   ========================================================= */
+const STEPS=[
+  {t:'Chromatin permissive',
+   d:'Nucleosomes are spaced; the H3 tail is unmodified at lysine 27. RNA polymerase II transcribes the gene.',
+   cite:'Baseline state. Nucleosome architecture: Luger et al., Nature 1997.',
+   p:{comp:0,me:0,prc2:-1,cbx:0,inh:-1,pol:1,expr:.85,dim:0}},
+  {t:'PRC2 engages the nucleosome',
+   d:'Polycomb repressive complex 2 — EZH2 with SUZ12 and EED — docks onto chromatin. EED binding to pre-existing H3K27me3 stimulates the complex.',
+   cite:'PRC2 allosteric activation by H3K27me3 via EED: Margueron et al., Nature 2009.',
+   p:{comp:0,me:0,prc2:1,cbx:0,inh:-1,pol:1,expr:.8,dim:0}},
+  {t:'Methyl transfer',
+   d:'The SET domain transfers methyl groups from S-adenosylmethionine to H3 lysine 27, one at a time, to trimethylation.',
+   cite:'EZH2 SET-domain catalysis and SAM dependence: Cao et al., Science 2002.',
+   p:{comp:.08,me:3,prc2:1,cbx:0,inh:-1,pol:.85,expr:.6,dim:0}},
+  {t:'The mark is read',
+   d:'Chromobox proteins in PRC1 recognise H3K27me3 and are recruited. Reading, not writing, is what converts a chemical tag into a physical outcome.',
+   cite:'CBX chromodomain recognition of H3K27me3: Fischle et al., Genes Dev 2003.',
+   p:{comp:.45,me:3,prc2:1,cbx:1,inh:-1,pol:.4,expr:.3,dim:0}},
+  {t:'Compaction and silencing',
+   d:'Chromatin compacts. Polymerase can no longer engage the promoter. In a differentiation-blocked tumour this is how a lineage programme is held shut.',
+   cite:'PRC1-mediated chromatin compaction: Francis et al., Science 2004.',
+   p:{comp:1,me:3,prc2:1,cbx:1,inh:-1,pol:0,expr:.04,dim:0}},
+  {t:'Inhibitor occupies the site',
+   d:'A methyltransferase inhibitor binds the enzyme. Substrate-competitive compounds block the peptide groove; cofactor-competitive ones block the SAM pocket. Which one matters — they behave differently under substrate load.',
+   cite:'Substrate- vs cofactor-competitive HKMT inhibition: Mol Cancer Ther 2022; Front Cell Dev Biol 2023.',
+   p:{comp:1,me:3,prc2:1,cbx:1,inh:1,pol:0,expr:.04,dim:1}},
+  {t:'The mark decays',
+   d:'No new methylation is deposited. Existing H3K27me3 is removed by KDM6 demethylases and diluted across cell divisions. This takes days, not minutes.',
+   cite:'KDM6A/UTX H3K27 demethylation: Agger et al., Nature 2007.',
+   p:{comp:.55,me:0,prc2:1,cbx:0,inh:1,pol:.3,expr:.25,dim:1}},
+  {t:'Re-expression and differentiation',
+   d:'Chromatin decompacts, polymerase re-engages, the silenced programme is transcribed. Whether the cell then differentiates is a separate question the map should not answer for you.',
+   cite:'EZH2 inhibition promotes myogenic differentiation: BMC Cancer 2014; Clin Epigenetics 2023.',
+   p:{comp:0,me:0,prc2:1,cbx:0,inh:1,pol:1,expr:.92,dim:1}},
+];
+
+const mechC=document.getElementById('mech'), mx=mechC.getContext('2d');
+let step=0, playing=true, tAcc=0, cur={comp:0,me:0,prc2:-1,cbx:0,inh:-1,pol:1,expr:.85,dim:0}, polPhase=0;
+const DUR=3400;
+
+function sizeMech(){
+  const r=mechC.parentElement.getBoundingClientRect();
+  mechC.width=r.width*devicePixelRatio; mechC.height=400*devicePixelRatio;
+  mechC.style.width=r.width+'px'; mechC.style.height='400px';
+}
+function buildSteps(){
+  const list=document.getElementById('steplist'), rail=document.getElementById('rail');
+  list.innerHTML=''; rail.innerHTML='';
+  STEPS.forEach((s,i)=>{
+    const d=document.createElement('div'); d.className='step'; d.setAttribute('aria-current',i===0);
+    const n=document.createElement('div'); n.className='n'; n.textContent='STEP '+(i+1);
+    const t=document.createElement('div'); t.className='t'; t.textContent=s.t;
+    const p=document.createElement('div'); p.className='d'; p.textContent=s.d;
+    const ed=document.createElement('span'); ed.className='ed'; ed.tabIndex=0;
+    const pop=document.createElement('span'); pop.className='pop';
+    const b=document.createElement('b'); b.textContent='Source · ';
+    pop.append(b,document.createTextNode(s.cite));
+    ed.appendChild(pop); p.appendChild(ed);
+    d.append(n,t,p); d.onclick=()=>{setStep(i);playing=false;syncPlay()};
+    list.appendChild(d);
+    const sg=document.createElement('div'); sg.className='seg'; sg.innerHTML='<i></i>';
+    sg.onclick=()=>{setStep(i);playing=false;syncPlay()};
+    rail.appendChild(sg);
+  });
+}
+function setStep(i){
+  step=(i+STEPS.length)%STEPS.length; tAcc=0;
+  document.querySelectorAll('.step').forEach((el,k)=>el.setAttribute('aria-current',k===step));
+  document.querySelectorAll('.seg').forEach((el,k)=>el.classList.toggle('done',k<step));
+}
+function resetMech(){setStep(0);cur={comp:0,me:0,prc2:-1,cbx:0,inh:-1,pol:1,expr:.85,dim:0};playing=true;syncPlay();sizeMech()}
+function syncPlay(){
+  document.getElementById('icPlay').style.display=playing?'none':'block';
+  document.getElementById('icPause').style.display=playing?'block':'none';
+}
+document.getElementById('mPlay').onclick=()=>{playing=!playing;syncPlay()};
+document.getElementById('mNext').onclick=()=>{setStep(step+1);playing=false;syncPlay()};
+document.getElementById('mPrev').onclick=()=>{setStep(step-1);playing=false;syncPlay()};
+
+let last=performance.now();
+function mechLoop(now){
+  const dt=Math.min(64,now-last); last=now;
+  if(playing){
+    tAcc+=dt;
+    document.querySelectorAll('.seg')[step].firstChild.style.width=Math.min(100,tAcc/DUR*100)+'%';
+    if(tAcc>=DUR){ document.querySelectorAll('.seg')[step].firstChild.style.width='0%'; setStep(step+1); }
+  }
+  const tgt=STEPS[step].p, e=1-Math.pow(1-0.055,dt/16.67);
+  for(const k in tgt) cur[k]+=(tgt[k]-cur[k])*e;
+  polPhase+=dt*0.0007*(0.25+cur.pol);
+  drawMech();
+  requestAnimationFrame(mechLoop);
+}
+requestAnimationFrame(mechLoop);
+
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+
+function drawMech(){
+  const W=mechC.width,H=mechC.height,S=devicePixelRatio;
+  mx.clearRect(0,0,W,H);
+  const midY=H*0.46;
+  const N=7, gapWide=W*0.118, gapTight=W*0.058;
+  const gap=gapWide+(gapTight-gapWide)*cur.comp;
+  const cx0=W/2-(N-1)/2*gap;
+
+  // DNA
+  mx.strokeStyle='rgba(255,255,255,0.16)'; mx.lineWidth=1.4*S;
+  mx.beginPath();
+  for(let x=W*0.04;x<W*0.96;x+=3*S){
+    const amp=(10+8*(1-cur.comp))*S;
+    const y=midY+Math.sin((x/W)*Math.PI*8+cur.comp*2)*amp*0.35;
+    x===W*0.04?mx.moveTo(x,y):mx.lineTo(x,y);
+  }
+  mx.stroke();
+
+  // nucleosomes
+  const R=17*S;
+  const centres=[];
+  for(let i=0;i<N;i++){
+    const x=cx0+i*gap, y=midY+Math.sin((x/W)*Math.PI*8+cur.comp*2)*(10+8*(1-cur.comp))*S*0.35;
+    centres.push([x,y]);
+    mx.save();
+    mx.shadowColor='rgba(91,140,255,0.25)'; mx.shadowBlur=14*S;
+    mx.fillStyle='rgba(24,30,40,0.95)'; mx.strokeStyle='rgba(160,180,220,0.5)'; mx.lineWidth=1.4*S;
+    mx.beginPath(); mx.ellipse(x,y,R,R*0.78,0,0,Math.PI*2); mx.fill(); mx.stroke();
+    mx.restore();
+  }
+
+  // H3 tail on centre nucleosome
+  const [tx,ty]=centres[3];
+  const tailLen=(52-14*cur.comp)*S;
+  const tipX=tx+tailLen*0.55, tipY=ty-tailLen;
+  mx.strokeStyle='rgba(220,230,245,0.55)'; mx.lineWidth=2*S; mx.lineCap='round';
+  mx.beginPath(); mx.moveTo(tx,ty-R*0.7);
+  mx.quadraticCurveTo(tx+tailLen*0.05,ty-tailLen*0.62,tipX,tipY); mx.stroke();
+
+  // K27 node
+  mx.fillStyle='rgba(12,15,20,1)'; mx.strokeStyle='rgba(220,230,245,0.75)'; mx.lineWidth=1.4*S;
+  mx.beginPath(); mx.arc(tipX,tipY,5.5*S,0,Math.PI*2); mx.fill(); mx.stroke();
+  mx.fillStyle='rgba(180,195,215,0.85)'; mx.font=(10*S)+'px ui-monospace,monospace'; mx.textAlign='left';
+  mx.fillText('H3K27',tipX+10*S,tipY+3.5*S);
+
+  // methyl groups
+  for(let m=0;m<3;m++){
+    const a=cur.me-m; if(a<=0.02) continue;
+    const alpha=Math.min(1,a);
+    const ang=-0.9+m*0.85;
+    const d=13*S*Math.min(1,a);
+    mx.fillStyle='rgba(51,200,176,'+(0.9*alpha)+')';
+    mx.beginPath(); mx.arc(tipX+Math.cos(ang)*d,tipY+Math.sin(ang)*d,3.2*S*alpha,0,Math.PI*2); mx.fill();
+  }
+
+  // PRC2
+  if(cur.prc2>-0.95){
+    const px=tx-(1-Math.max(0,cur.prc2))*W*0.45, py=ty-64*S;
+    const alpha=Math.max(0,Math.min(1,cur.prc2));
+    const dim=cur.dim;
+    mx.save(); mx.globalAlpha=alpha;
+    mx.shadowColor='rgba(144,133,233,'+(0.35*(1-dim*0.8))+')'; mx.shadowBlur=18*S;
+    mx.fillStyle='rgba(30,28,52,0.94)';
+    mx.strokeStyle=dim>0.5?'rgba(150,150,160,0.45)':'rgba(160,150,240,0.75)';
+    mx.lineWidth=1.6*S;
+    rr(mx,px-46*S,py-22*S,92*S,44*S,12*S); mx.fill(); mx.stroke();
+    mx.shadowBlur=0;
+    mx.fillStyle=dim>0.5?'rgba(150,155,165,0.75)':'rgba(200,195,255,0.95)';
+    mx.font='600 '+(11*S)+'px system-ui'; mx.textAlign='center';
+    mx.fillText('PRC2 · EZH2',px,py-2*S);
+    mx.font=(9.5*S)+'px ui-monospace,monospace';
+    mx.fillStyle=dim>0.5?'rgba(224,96,126,0.95)':'rgba(160,155,200,0.8)';
+    mx.fillText(dim>0.5?'catalysis blocked':'SET domain',px,py+12*S);
+    // groove line to K27
+    mx.globalAlpha=alpha*0.5*(1-dim);
+    mx.strokeStyle='rgba(144,133,233,0.8)'; mx.setLineDash([3*S,4*S]); mx.lineWidth=1.2*S;
+    mx.beginPath(); mx.moveTo(px,py+22*S); mx.lineTo(tipX,tipY-7*S); mx.stroke(); mx.setLineDash([]);
+    mx.restore();
+  }
+
+  // inhibitor hexagon
+  if(cur.inh>-0.95){
+    const a=Math.max(0,Math.min(1,cur.inh));
+    const hx=tx-46*S+(1-a)*(-W*0.35), hy=ty-64*S+ (1-a)*(-90*S);
+    mx.save(); mx.globalAlpha=a;
+    mx.shadowColor='rgba(224,96,126,0.5)'; mx.shadowBlur=16*S;
+    mx.fillStyle='rgba(52,20,32,0.95)'; mx.strokeStyle='rgba(224,96,126,0.9)'; mx.lineWidth=1.6*S;
+    mx.beginPath();
+    for(let i=0;i<6;i++){const A=Math.PI/6+i*Math.PI/3; const X=hx+Math.cos(A)*13*S, Y=hy+Math.sin(A)*13*S; i?mx.lineTo(X,Y):mx.moveTo(X,Y)}
+    mx.closePath(); mx.fill(); mx.stroke(); mx.shadowBlur=0;
+    mx.fillStyle='rgba(240,170,190,0.95)'; mx.font=(9.5*S)+'px ui-monospace,monospace'; mx.textAlign='right';
+    mx.fillText('inhibitor',hx-19*S,hy+3.5*S);
+    mx.restore();
+  }
+
+  // CBX / PRC1 readers
+  if(cur.cbx>0.02){
+    const a=Math.min(1,cur.cbx);
+    [2,3,4].forEach((idx,k)=>{
+      const [ax,ay]=centres[idx];
+      mx.save(); mx.globalAlpha=a*0.95;
+      mx.fillStyle='rgba(18,42,38,0.95)'; mx.strokeStyle='rgba(51,200,176,0.7)'; mx.lineWidth=1.4*S;
+      mx.beginPath(); mx.arc(ax,ay+R*1.5,9*S,0,Math.PI*2); mx.fill(); mx.stroke();
+      mx.restore();
+    });
+    mx.save(); mx.globalAlpha=a;
+    mx.fillStyle='rgba(120,220,205,0.85)'; mx.font=(10*S)+'px system-ui'; mx.textAlign='center';
+    mx.fillText('CBX / PRC1 reads the mark',centres[3][0],centres[3][1]+R*1.5+26*S);
+    mx.restore();
+  }
+
+  // RNA Pol II
+  if(cur.pol>0.02){
+    const a=Math.min(1,cur.pol);
+    const t=(polPhase%1);
+    const px=W*0.08+t*W*0.84;
+    const py=midY+Math.sin((px/W)*Math.PI*8+cur.comp*2)*(10+8*(1-cur.comp))*S*0.35 - R*1.7;
+    mx.save(); mx.globalAlpha=a;
+    mx.shadowColor='rgba(91,140,255,0.5)'; mx.shadowBlur=14*S;
+    mx.fillStyle='rgba(16,28,54,0.95)'; mx.strokeStyle='rgba(91,140,255,0.85)'; mx.lineWidth=1.5*S;
+    mx.beginPath(); mx.arc(px,py,11*S,0,Math.PI*2); mx.fill(); mx.stroke(); mx.shadowBlur=0;
+    mx.fillStyle='rgba(170,200,255,0.9)'; mx.font=(9*S)+'px ui-monospace,monospace'; mx.textAlign='center';
+    mx.fillText('Pol II',px,py-16*S);
+    mx.restore();
+  }
+
+  // expression meter
+  const bx=W*0.08, bw=W*0.84, by=H-40*S;
+  mx.fillStyle='rgba(255,255,255,0.5)'; mx.font=(10.5*S)+'px system-ui'; mx.textAlign='left';
+  mx.fillText('TARGET GENE EXPRESSION',bx,by-11*S);
+  mx.fillStyle='rgba(255,255,255,0.08)'; rr(mx,bx,by,bw,7*S,3.5*S); mx.fill();
+  const gcol = cur.expr>0.5 ? '51,200,176' : (cur.expr>0.15?'232,163,61':'224,96,126');
+  mx.fillStyle='rgba('+gcol+',0.9)'; rr(mx,bx,by,Math.max(3*S,bw*cur.expr),7*S,3.5*S); mx.fill();
+  mx.fillStyle='rgba(255,255,255,0.45)'; mx.textAlign='right'; mx.font=(10*S)+'px ui-monospace,monospace';
+  mx.fillText(cur.expr>0.5?'transcribing':(cur.expr>0.15?'partial':'silenced'),bx+bw,by-11*S);
+
+  // step title
+  mx.fillStyle='rgba(255,255,255,0.92)'; mx.font='300 '+(19*S)+'px system-ui'; mx.textAlign='left';
+  mx.fillText(STEPS[step].t, W*0.08, 40*S);
+  mx.fillStyle='rgba(255,255,255,0.32)'; mx.font=(10.5*S)+'px ui-monospace,monospace';
+  mx.fillText('STEP '+(step+1)+' / '+STEPS.length, W*0.08, 60*S);
+}
+
+buildSteps(); sizeMech(); syncPlay();
+</script>
+</body>
+</html>
