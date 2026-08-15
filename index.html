@@ -128,7 +128,8 @@ button{font:inherit;color:inherit}
   background:radial-gradient(700px 460px at 50% 42%,#0f1319,#08090b 72%);height:520px
 }
 #mol{display:block;width:100%;height:100%;cursor:grab}
-#mol:active{cursor:grabbing}
+#mol:active,#mol canvas:active{cursor:grabbing}
+#mol canvas{display:block;cursor:grab;outline:0}
 .vstate{
   position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:12px;text-align:center;padding:36px;color:var(--ink-2);font-size:14px
@@ -272,7 +273,7 @@ button{font:inherit;color:inherit}
     <div class="pane on" id="pane-structure">
       <div class="sgrid">
         <div class="viewer">
-          <canvas id="mol"></canvas>
+          <div id="mol" role="img" aria-label="Interactive three-dimensional protein structure"></div>
           <div class="vstate" id="vstate">
             <div class="spinner"></div>
             <h4>Resolving accession…</h4>
@@ -304,7 +305,7 @@ button{font:inherit;color:inherit}
             <div class="kv"><span class="k">Accession</span><span class="v mono" id="mAcc">—</span></div>
             <div class="kv"><span class="k">Residues rendered</span><span class="v mono" id="mRes">—</span></div>
             <div class="kv"><span class="k">Mean pLDDT</span><span class="v mono" id="mPl">—</span></div>
-            <div class="kv"><span class="k">Representation</span><span class="v">Cα trace, spline-smoothed</span></div>
+            <div class="kv"><span class="k">Representation</span><span class="v">Cartoon / ribbon, WebGL</span></div>
           </div>
 
           <div class="side">
@@ -356,11 +357,12 @@ button{font:inherit;color:inherit}
   </section>
 
   <div class="foot">
-    <span>Structures: AlphaFold DB (EMBL-EBI) and RCSB PDB · Accessions: UniProt</span>
+    <span>Structures: AlphaFold DB (EMBL-EBI) and RCSB PDB · Accessions: UniProt · Viewer: 3Dmol.js</span>
     <span>Demo build — two lenses working, four stubbed</span>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.5.3/3Dmol-min.js"></script>
 <script>
 /* =========================================================
    Ambient field — reconfiguring blocks (identity motif)
@@ -508,9 +510,9 @@ document.querySelectorAll('.lens').forEach(b=>{
 /* =========================================================
    STRUCTURE — resolve, fetch, parse, render
    ========================================================= */
-const molC=document.getElementById('mol'), molX=molC.getContext('2d');
+const molC=document.getElementById('mol');
 const vstate=document.getElementById('vstate'), vmsg=document.getElementById('vmsg');
-let CA=[], yaw=0.6, pitch=0.15, zoom=1, spin=true, byPl=true, drag=null;
+let molViewer=null, currentModel=null, currentIsAF=true, spin=true, byPl=true;
 
 function setState(title,msg,busy){
   vstate.classList.remove('hidden');
@@ -522,7 +524,9 @@ function setState(title,msg,busy){
 function clearState(){vstate.classList.add('hidden')}
 
 async function loadStructure(sym){
-  CA=[]; setState('Resolving accession…','UniProt → AlphaFold DB',true);
+  currentModel=null;
+  if(molViewer){molViewer.removeAllModels();molViewer.render()}
+  setState('Resolving accession…','UniProt → AlphaFold DB',true);
   document.getElementById('mSource').textContent='—';
   document.getElementById('mAcc').textContent='—';
   document.getElementById('mRes').textContent='—';
@@ -608,115 +612,98 @@ function ingest(text,sourceLabel){
     setState('No backbone found','The file loaded but contained fewer than four Cα atoms. Nothing is drawn.',false);
     return;
   }
-  // centre + scale
-  let cx=0,cy=0,cz=0;
-  pts.forEach(p=>{cx+=p.x;cy+=p.y;cz+=p.z});
-  cx/=pts.length;cy/=pts.length;cz/=pts.length;
-  let maxr=0;
-  pts.forEach(p=>{p.x-=cx;p.y-=cy;p.z-=cz;maxr=Math.max(maxr,Math.hypot(p.x,p.y,p.z))});
-  const k=1/maxr;
-  pts.forEach(p=>{p.x*=k;p.y*=k;p.z*=k});
-
-  // spline-smooth per chain
-  CA=[];
-  let chain=[],cur=pts[0].ch;
-  const flush=()=>{ if(chain.length>3) CA.push(smooth(chain)); chain=[]; };
-  for(const p of pts){ if(p.ch!==cur){flush();cur=p.ch} chain.push(p) }
-  flush();
-
   const mean=pts.reduce((a,p)=>a+p.b,0)/pts.length;
   const isAF=sourceLabel.indexOf('AlphaFold')===0;
+  const chains=new Set(pts.map(p=>p.ch)).size;
   document.getElementById('mSource').textContent=sourceLabel;
   document.getElementById('mRes').textContent=pts.length;
   document.getElementById('mPl').textContent=isAF?mean.toFixed(1):'n/a (B-factor)';
-  document.getElementById('vmeta').textContent=sourceLabel+' · '+pts.length+' residues · '+CA.length+' chain'+(CA.length>1?'s':'');
-  document.getElementById('tColor').textContent = isAF ? 'Colour: pLDDT' : 'Colour: B-factor';
-  yaw=0.6;pitch=0.15;zoom=1;
-  clearState(); sizeMol();
-}
+  document.getElementById('vmeta').textContent=sourceLabel+' · '+pts.length+' residues · '+chains+' chain'+(chains>1?'s':'');
 
-function smooth(ch){
-  const out=[];
-  const N=ch.length, SUB=5;
-  const g=i=>ch[Math.max(0,Math.min(N-1,i))];
-  for(let i=0;i<N-1;i++){
-    const p0=g(i-1),p1=g(i),p2=g(i+1),p3=g(i+2);
-    for(let s=0;s<SUB;s++){
-      const t=s/SUB,t2=t*t,t3=t2*t;
-      out.push({
-        x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
-        y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
-        z:0.5*((2*p1.z)+(-p0.z+p2.z)*t+(2*p0.z-5*p1.z+4*p2.z-p3.z)*t2+(-p0.z+3*p1.z-3*p2.z+p3.z)*t3),
-        b:p1.b+(p2.b-p1.b)*t
-      });
-    }
+  const viewer=ensureMolViewer();
+  if(!viewer) return;
+  try{
+    viewer.removeAllModels();
+    currentModel=viewer.addModel(text,'pdb');
+    currentIsAF=isAF;
+    byPl=true;
+    applyStructureStyle();
+    viewer.zoomTo();
+    viewer.zoom(1.08);
+    if(spin) viewer.spin('y',0.45);
+    clearState();
+    requestAnimationFrame(sizeMol);
+  }catch(err){
+    currentModel=null;
+    setState('Structure could not be rendered',err.message||'The molecular viewer rejected this model.',false);
   }
-  return out;
 }
 
-function plColour(b){
-  if(b>=90) return [0,83,214];
-  if(b>=70) return [101,203,243];
-  if(b>=50) return [255,219,19];
-  return [255,125,69];
+function ensureMolViewer(){
+  if(molViewer) return molViewer;
+  if(!window.$3Dmol){
+    setState('Viewer unavailable','3Dmol.js could not be loaded. Check the network connection and reload the page.',false);
+    return null;
+  }
+  molViewer=window.$3Dmol.createViewer(molC,{
+    backgroundColor:'#08090b',
+    backgroundAlpha:0,
+    antialias:true
+  });
+  return molViewer;
 }
-function chainColour(i){
-  const P=[[91,140,255],[217,89,38],[25,158,112],[201,133,0],[213,81,129],[144,133,233]];
-  return P[i%P.length];
+
+function plColour(atom){
+  const b=Number(atom.b)||0;
+  if(b>=90) return '#0053D6';
+  if(b>=70) return '#65CBF3';
+  if(b>=50) return '#FFDB13';
+  return '#FF7D45';
+}
+
+function bFactorColour(atom){
+  const t=Math.max(0,Math.min(1,(Number(atom.b)||0)/100));
+  const r=Math.round(101+(255-101)*t);
+  const g=Math.round(203+(125-203)*t);
+  const b=Math.round(243+(69-243)*t);
+  return 'rgb('+r+','+g+','+b+')';
+}
+
+function syncColourButton(){
+  const btn=document.getElementById('tColor');
+  btn.textContent=byPl?(currentIsAF?'Colour: pLDDT':'Colour: B-factor'):'Colour: chain';
+  btn.setAttribute('aria-pressed',byPl);
+}
+
+function applyStructureStyle(){
+  if(!molViewer||!currentModel) return;
+  const cartoon={style:'rectangle',arrows:true,tubes:false,thickness:0.45};
+  if(byPl) cartoon.colorfunc=currentIsAF?plColour:bFactorColour;
+  else cartoon.colorscheme='chain';
+  molViewer.setStyle({},{cartoon});
+  molViewer.render();
+  syncColourButton();
 }
 
 function sizeMol(){
-  const r=molC.parentElement.getBoundingClientRect();
-  molC.width=r.width*devicePixelRatio; molC.height=r.height*devicePixelRatio;
-  molC.style.width=r.width+'px'; molC.style.height=r.height+'px';
+  if(!molViewer) return;
+  molViewer.resize();
+  molViewer.render();
 }
 addEventListener('resize',()=>{sizeMol();sizeMech()});
 
-molC.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};molC.setPointerCapture(e.pointerId)});
-molC.addEventListener('pointermove',e=>{
-  if(!drag)return;
-  yaw+=(e.clientX-drag.x)*0.008; pitch+=(e.clientY-drag.y)*0.008;
-  pitch=Math.max(-1.4,Math.min(1.4,pitch)); drag={x:e.clientX,y:e.clientY};
-});
-addEventListener('pointerup',()=>drag=null);
-molC.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.5,Math.min(3.2,zoom*(e.deltaY>0?0.92:1.08)))},{passive:false});
-document.getElementById('tSpin').onclick=e=>{spin=!spin;e.currentTarget.setAttribute('aria-pressed',spin)};
-document.getElementById('tColor').onclick=e=>{byPl=!byPl;e.currentTarget.setAttribute('aria-pressed',byPl)};
-document.getElementById('tReset').onclick=()=>{yaw=0.6;pitch=0.15;zoom=1};
-
-function drawMol(){
-  const W=molC.width,H=molC.height;
-  molX.clearRect(0,0,W,H);
-  if(CA.length){
-    if(spin&&!drag) yaw+=0.0032;
-    const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
-    const R=Math.min(W,H)*0.40*zoom, ox=W/2, oy=H/2;
-    const segs=[];
-    CA.forEach((ch,ci)=>{
-      let prev=null;
-      for(const p of ch){
-        const x1=p.x*cy - p.z*sy, z1=p.x*sy + p.z*cy;
-        const y2=p.y*cp - z1*sp, z2=p.y*sp + z1*cp;
-        const cur={sx:ox+x1*R, sy:oy+y2*R, z:z2, b:p.b, ci};
-        if(prev) segs.push([prev,cur]);
-        prev=cur;
-      }
-    });
-    segs.sort((a,b)=>(a[0].z+a[1].z)-(b[0].z+b[1].z));
-    const lw=Math.max(1.6,3.4*devicePixelRatio*zoom);
-    molX.lineCap='round';molX.lineJoin='round';
-    for(const [a,b] of segs){
-      const z=(a.z+b.z)/2;
-      const fog=Math.max(0.18,Math.min(1,(z+1.15)/2.1));
-      const c=byPl?plColour((a.b+b.b)/2):chainColour(a.ci);
-      molX.strokeStyle='rgba('+Math.round(c[0]*fog)+','+Math.round(c[1]*fog)+','+Math.round(c[2]*fog)+','+(0.42+fog*0.58)+')';
-      molX.lineWidth=lw*(0.62+fog*0.6);
-      molX.beginPath();molX.moveTo(a.sx,a.sy);molX.lineTo(b.sx,b.sy);molX.stroke();
-    }
-  }
-  requestAnimationFrame(drawMol);
-}
-requestAnimationFrame(drawMol);
+document.getElementById('tSpin').onclick=e=>{
+  spin=!spin;
+  e.currentTarget.setAttribute('aria-pressed',spin);
+  if(molViewer) spin?molViewer.spin('y',0.45):molViewer.spin(false);
+};
+document.getElementById('tColor').onclick=()=>{byPl=!byPl;applyStructureStyle()};
+document.getElementById('tReset').onclick=()=>{
+  if(!molViewer||!currentModel) return;
+  molViewer.zoomTo();
+  molViewer.zoom(1.08);
+  molViewer.render();
+};
 
 /* =========================================================
    MECHANISM THEATRE
