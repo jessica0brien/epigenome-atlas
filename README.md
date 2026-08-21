@@ -2,7 +2,7 @@
 
 A single-page reference tool for the proteins that write, erase and read chromatin marks. Search a protein, then look at it two ways: its predicted 3D structure, and an animated walk-through of the methylation → silencing → inhibition → re-expression sequence.
 
-**Live:** `https://<your-username>.github.io/epigenome-atlas/`
+**Live:** `https://jessica0brien.github.io/epigenome-atlas/`
 
 ---
 
