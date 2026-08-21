@@ -128,8 +128,7 @@ button{font:inherit;color:inherit}
   background:radial-gradient(700px 460px at 50% 42%,#0f1319,#08090b 72%);height:520px
 }
 #mol{display:block;width:100%;height:100%;cursor:grab}
-#mol:active,#mol canvas:active{cursor:grabbing}
-#mol canvas{display:block;cursor:grab;outline:0}
+#mol:active{cursor:grabbing}
 .vstate{
   position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:12px;text-align:center;padding:36px;color:var(--ink-2);font-size:14px
@@ -237,8 +236,8 @@ button{font:inherit;color:inherit}
   <!-- HERO -->
   <section class="hero" id="hero">
     <div class="eyebrow">Chromatin regulators · pan-cancer</div>
-    <h1>Look at the machinery<br><em>that decides which genes are read.</em></h1>
-    <p class="lede">Predicted structures, catalytic mechanism and downstream consequence for the writers, erasers and readers of the epigenome — assembled from public structural and literature databases.</p>
+    <h1>The machinery that decides<br><em>which genes are read.</em></h1>
+    <p class="lede">Structure and mechanism for the writers, erasers and readers of the epigenome.</p>
 
     <div class="bigsearch">
       <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#646b73" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
@@ -273,7 +272,7 @@ button{font:inherit;color:inherit}
     <div class="pane on" id="pane-structure">
       <div class="sgrid">
         <div class="viewer">
-          <div id="mol" role="img" aria-label="Interactive three-dimensional protein structure"></div>
+          <canvas id="mol"></canvas>
           <div class="vstate" id="vstate">
             <div class="spinner"></div>
             <h4>Resolving accession…</h4>
@@ -295,7 +294,7 @@ button{font:inherit;color:inherit}
             <div class="plrow"><span class="sw" style="background:var(--pl-low)"></span> Low · 50–70</div>
             <div class="plrow"><span class="sw" style="background:var(--pl-vlow)"></span> Very low · under 50</div>
             <div style="font-size:12px;color:var(--ink-3);margin-top:12px;line-height:1.5">
-              Colours are the AlphaFold DB convention. Low-confidence regions are frequently intrinsically disordered — absence of a fold here is information, not error.
+              AlphaFold DB convention. Low confidence usually means disorder, not error.
             </div>
           </div>
 
@@ -305,20 +304,20 @@ button{font:inherit;color:inherit}
             <div class="kv"><span class="k">Accession</span><span class="v mono" id="mAcc">—</span></div>
             <div class="kv"><span class="k">Residues rendered</span><span class="v mono" id="mRes">—</span></div>
             <div class="kv"><span class="k">Mean pLDDT</span><span class="v mono" id="mPl">—</span></div>
-            <div class="kv"><span class="k">Representation</span><span class="v">Cartoon / ribbon, WebGL</span></div>
+            <div class="kv"><span class="k">Representation</span><span class="v">Cα trace, spline-smoothed</span></div>
           </div>
 
           <div class="side">
             <h5>Experimental structure</h5>
             <div style="font-size:12.5px;color:var(--ink-2);line-height:1.5">
-              Load any entry from the RCSB PDB to see a solved structure instead of a prediction — including ones with an inhibitor bound.
+              Load a solved structure from the RCSB PDB, including ones with a ligand bound.
             </div>
             <div class="pdbin">
               <input id="pdbid" placeholder="PDB ID, e.g. 4MI0" aria-label="PDB ID">
               <button id="pdbgo">Load</button>
             </div>
             <div style="font-size:11.5px;color:var(--ink-3);margin-top:9px">
-              I have not verified any specific PDB ID for you — search RCSB and paste one. If it does not exist or cannot be reached, the viewer will say so rather than showing you something else.
+              No IDs are suggested — find one on RCSB. If it fails, the viewer says so rather than showing something else.
             </div>
           </div>
         </div>
@@ -346,7 +345,7 @@ button{font:inherit;color:inherit}
             </div>
             <div class="schembar">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--amber);flex:none;margin-top:2px"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-              <div><b>Schematic — not a simulation.</b> Shapes and positions are diagrammatic. Nothing here is molecular dynamics, docking or a structural prediction. What is asserted is the <em>sequence of events</em>, and each step carries its own citation.</div>
+              <div><b>Schematic — not a simulation.</b> Shapes are diagrammatic. The claim is the <em>sequence</em>, not the geometry. Every step cites its source.</div>
             </div>
           </div>
         </div>
@@ -357,12 +356,11 @@ button{font:inherit;color:inherit}
   </section>
 
   <div class="foot">
-    <span>Structures: AlphaFold DB (EMBL-EBI) and RCSB PDB · Accessions: UniProt · Viewer: 3Dmol.js</span>
+    <span>Structures: AlphaFold DB (EMBL-EBI) and RCSB PDB · Accessions: UniProt</span>
     <span>Demo build — two lenses working, four stubbed</span>
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.5.3/3Dmol-min.js"></script>
 <script>
 /* =========================================================
    Ambient field — reconfiguring blocks (identity motif)
@@ -453,7 +451,7 @@ function renderSuggest(v){
   if(!t){suggest.classList.remove('on');suggest.innerHTML='';return}
   const hits=CATALOGUE.filter(e=>e.s.startsWith(t)||e.m.toUpperCase().includes(t)).slice(0,6);
   if(!hits.length){
-    suggest.innerHTML='<div class="sg"><span class="cls">Not in this demo’s catalogue. The full build resolves any UniProt entry.</span></div>';
+    suggest.innerHTML='<div class="sg"><span class="cls">Not in this catalogue. The full build resolves any UniProt entry.</span></div>';
     suggest.classList.add('on'); return;
   }
   suggest.innerHTML='';
@@ -510,9 +508,9 @@ document.querySelectorAll('.lens').forEach(b=>{
 /* =========================================================
    STRUCTURE — resolve, fetch, parse, render
    ========================================================= */
-const molC=document.getElementById('mol');
+const molC=document.getElementById('mol'), molX=molC.getContext('2d');
 const vstate=document.getElementById('vstate'), vmsg=document.getElementById('vmsg');
-let molViewer=null, currentModel=null, currentIsAF=true, spin=true, byPl=true;
+let CA=[], yaw=0.6, pitch=0.15, zoom=1, spin=true, byPl=true, drag=null;
 
 function setState(title,msg,busy){
   vstate.classList.remove('hidden');
@@ -524,9 +522,7 @@ function setState(title,msg,busy){
 function clearState(){vstate.classList.add('hidden')}
 
 async function loadStructure(sym){
-  currentModel=null;
-  if(molViewer){molViewer.removeAllModels();molViewer.render()}
-  setState('Resolving accession…','UniProt → AlphaFold DB',true);
+  CA=[]; setState('Resolving accession…','UniProt → AlphaFold DB',true);
   document.getElementById('mSource').textContent='—';
   document.getElementById('mAcc').textContent='—';
   document.getElementById('mRes').textContent='—';
@@ -545,7 +541,7 @@ async function loadStructure(sym){
     desc=j.results[0].proteinDescription?.recommendedName?.fullName?.value||null;
   }catch(err){
     setState('Could not resolve this symbol',
-      'UniProt could not be reached from this page ('+err.message+'). Nothing is shown rather than a guessed structure. In the deployed app this call runs server-side, where it is not subject to browser network restrictions.',false);
+      'UniProt could not be reached ('+err.message+'). Nothing is shown rather than a guess.',false);
     return;
   }
 
@@ -572,7 +568,7 @@ async function loadStructure(sym){
   }
   if(!pdbText){
     setState('No model loaded',
-      'AlphaFold DB could not be reached from this page, or has no model for '+acc+'. Nothing is drawn. An empty viewer is the correct answer here — a placeholder molecule would be a lie.',false);
+      'AlphaFold DB is unreachable, or has no model for '+acc+'. An empty viewer is the correct answer — a placeholder molecule would be a lie.',false);
     return;
   }
   ingest(pdbText,'AlphaFold DB (predicted)');
@@ -589,7 +585,7 @@ async function loadPDB(id){
     document.getElementById('mAcc').textContent=id;
     ingest(t,'RCSB PDB (experimental)');
   }catch(err){
-    setState('Entry not loaded','RCSB returned '+err.message+' for '+id+'. Either the ID does not exist or this page cannot reach RCSB. Nothing is substituted.',false);
+    setState('Entry not loaded','RCSB returned '+err.message+' for '+id+'. Nothing is substituted.',false);
   }
 }
 document.getElementById('pdbgo').onclick=()=>loadPDB(document.getElementById('pdbid').value);
@@ -609,136 +605,153 @@ function ingest(text,sourceLabel){
     }
   }
   if(pts.length<4){
-    setState('No backbone found','The file loaded but contained fewer than four Cα atoms. Nothing is drawn.',false);
+    setState('No backbone found','Fewer than four Cα atoms in the file. Nothing is drawn.',false);
     return;
   }
+  // centre + scale
+  let cx=0,cy=0,cz=0;
+  pts.forEach(p=>{cx+=p.x;cy+=p.y;cz+=p.z});
+  cx/=pts.length;cy/=pts.length;cz/=pts.length;
+  let maxr=0;
+  pts.forEach(p=>{p.x-=cx;p.y-=cy;p.z-=cz;maxr=Math.max(maxr,Math.hypot(p.x,p.y,p.z))});
+  const k=1/maxr;
+  pts.forEach(p=>{p.x*=k;p.y*=k;p.z*=k});
+
+  // spline-smooth per chain
+  CA=[];
+  let chain=[],cur=pts[0].ch;
+  const flush=()=>{ if(chain.length>3) CA.push(smooth(chain)); chain=[]; };
+  for(const p of pts){ if(p.ch!==cur){flush();cur=p.ch} chain.push(p) }
+  flush();
+
   const mean=pts.reduce((a,p)=>a+p.b,0)/pts.length;
   const isAF=sourceLabel.indexOf('AlphaFold')===0;
-  const chains=new Set(pts.map(p=>p.ch)).size;
   document.getElementById('mSource').textContent=sourceLabel;
   document.getElementById('mRes').textContent=pts.length;
   document.getElementById('mPl').textContent=isAF?mean.toFixed(1):'n/a (B-factor)';
-  document.getElementById('vmeta').textContent=sourceLabel+' · '+pts.length+' residues · '+chains+' chain'+(chains>1?'s':'');
+  document.getElementById('vmeta').textContent=sourceLabel+' · '+pts.length+' residues · '+CA.length+' chain'+(CA.length>1?'s':'');
+  document.getElementById('tColor').textContent = isAF ? 'Colour: pLDDT' : 'Colour: B-factor';
+  yaw=0.6;pitch=0.15;zoom=1;
+  clearState(); sizeMol();
+}
 
-  const viewer=ensureMolViewer();
-  if(!viewer) return;
-  try{
-    viewer.removeAllModels();
-    currentModel=viewer.addModel(text,'pdb');
-    currentIsAF=isAF;
-    byPl=true;
-    applyStructureStyle();
-    viewer.zoomTo();
-    viewer.zoom(1.08);
-    if(spin) viewer.spin('y',0.45);
-    clearState();
-    requestAnimationFrame(sizeMol);
-  }catch(err){
-    currentModel=null;
-    setState('Structure could not be rendered',err.message||'The molecular viewer rejected this model.',false);
+function smooth(ch){
+  const out=[];
+  const N=ch.length, SUB=5;
+  const g=i=>ch[Math.max(0,Math.min(N-1,i))];
+  for(let i=0;i<N-1;i++){
+    const p0=g(i-1),p1=g(i),p2=g(i+1),p3=g(i+2);
+    for(let s=0;s<SUB;s++){
+      const t=s/SUB,t2=t*t,t3=t2*t;
+      out.push({
+        x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+        y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3),
+        z:0.5*((2*p1.z)+(-p0.z+p2.z)*t+(2*p0.z-5*p1.z+4*p2.z-p3.z)*t2+(-p0.z+3*p1.z-3*p2.z+p3.z)*t3),
+        b:p1.b+(p2.b-p1.b)*t
+      });
+    }
   }
+  return out;
 }
 
-function ensureMolViewer(){
-  if(molViewer) return molViewer;
-  if(!window.$3Dmol){
-    setState('Viewer unavailable','3Dmol.js could not be loaded. Check the network connection and reload the page.',false);
-    return null;
-  }
-  molViewer=window.$3Dmol.createViewer(molC,{
-    backgroundColor:'#08090b',
-    backgroundAlpha:0,
-    antialias:true
-  });
-  return molViewer;
+function plColour(b){
+  if(b>=90) return [0,83,214];
+  if(b>=70) return [101,203,243];
+  if(b>=50) return [255,219,19];
+  return [255,125,69];
 }
-
-function plColour(atom){
-  const b=Number(atom.b)||0;
-  if(b>=90) return '#0053D6';
-  if(b>=70) return '#65CBF3';
-  if(b>=50) return '#FFDB13';
-  return '#FF7D45';
-}
-
-function bFactorColour(atom){
-  const t=Math.max(0,Math.min(1,(Number(atom.b)||0)/100));
-  const r=Math.round(101+(255-101)*t);
-  const g=Math.round(203+(125-203)*t);
-  const b=Math.round(243+(69-243)*t);
-  return 'rgb('+r+','+g+','+b+')';
-}
-
-function syncColourButton(){
-  const btn=document.getElementById('tColor');
-  btn.textContent=byPl?(currentIsAF?'Colour: pLDDT':'Colour: B-factor'):'Colour: chain';
-  btn.setAttribute('aria-pressed',byPl);
-}
-
-function applyStructureStyle(){
-  if(!molViewer||!currentModel) return;
-  const cartoon={style:'rectangle',arrows:true,tubes:false,thickness:0.45};
-  if(byPl) cartoon.colorfunc=currentIsAF?plColour:bFactorColour;
-  else cartoon.colorscheme='chain';
-  molViewer.setStyle({},{cartoon});
-  molViewer.render();
-  syncColourButton();
+function chainColour(i){
+  const P=[[91,140,255],[217,89,38],[25,158,112],[201,133,0],[213,81,129],[144,133,233]];
+  return P[i%P.length];
 }
 
 function sizeMol(){
-  if(!molViewer) return;
-  molViewer.resize();
-  molViewer.render();
+  const r=molC.parentElement.getBoundingClientRect();
+  molC.width=r.width*devicePixelRatio; molC.height=r.height*devicePixelRatio;
+  molC.style.width=r.width+'px'; molC.style.height=r.height+'px';
 }
 addEventListener('resize',()=>{sizeMol();sizeMech()});
 
-document.getElementById('tSpin').onclick=e=>{
-  spin=!spin;
-  e.currentTarget.setAttribute('aria-pressed',spin);
-  if(molViewer) spin?molViewer.spin('y',0.45):molViewer.spin(false);
-};
-document.getElementById('tColor').onclick=()=>{byPl=!byPl;applyStructureStyle()};
-document.getElementById('tReset').onclick=()=>{
-  if(!molViewer||!currentModel) return;
-  molViewer.zoomTo();
-  molViewer.zoom(1.08);
-  molViewer.render();
-};
+molC.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};molC.setPointerCapture(e.pointerId)});
+molC.addEventListener('pointermove',e=>{
+  if(!drag)return;
+  yaw+=(e.clientX-drag.x)*0.008; pitch+=(e.clientY-drag.y)*0.008;
+  pitch=Math.max(-1.4,Math.min(1.4,pitch)); drag={x:e.clientX,y:e.clientY};
+});
+addEventListener('pointerup',()=>drag=null);
+molC.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.5,Math.min(3.2,zoom*(e.deltaY>0?0.92:1.08)))},{passive:false});
+document.getElementById('tSpin').onclick=e=>{spin=!spin;e.currentTarget.setAttribute('aria-pressed',spin)};
+document.getElementById('tColor').onclick=e=>{byPl=!byPl;e.currentTarget.setAttribute('aria-pressed',byPl)};
+document.getElementById('tReset').onclick=()=>{yaw=0.6;pitch=0.15;zoom=1};
+
+function drawMol(){
+  const W=molC.width,H=molC.height;
+  molX.clearRect(0,0,W,H);
+  if(CA.length){
+    if(spin&&!drag) yaw+=0.0032;
+    const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+    const R=Math.min(W,H)*0.40*zoom, ox=W/2, oy=H/2;
+    const segs=[];
+    CA.forEach((ch,ci)=>{
+      let prev=null;
+      for(const p of ch){
+        const x1=p.x*cy - p.z*sy, z1=p.x*sy + p.z*cy;
+        const y2=p.y*cp - z1*sp, z2=p.y*sp + z1*cp;
+        const cur={sx:ox+x1*R, sy:oy+y2*R, z:z2, b:p.b, ci};
+        if(prev) segs.push([prev,cur]);
+        prev=cur;
+      }
+    });
+    segs.sort((a,b)=>(a[0].z+a[1].z)-(b[0].z+b[1].z));
+    const lw=Math.max(1.6,3.4*devicePixelRatio*zoom);
+    molX.lineCap='round';molX.lineJoin='round';
+    for(const [a,b] of segs){
+      const z=(a.z+b.z)/2;
+      const fog=Math.max(0.18,Math.min(1,(z+1.15)/2.1));
+      const c=byPl?plColour((a.b+b.b)/2):chainColour(a.ci);
+      molX.strokeStyle='rgba('+Math.round(c[0]*fog)+','+Math.round(c[1]*fog)+','+Math.round(c[2]*fog)+','+(0.42+fog*0.58)+')';
+      molX.lineWidth=lw*(0.62+fog*0.6);
+      molX.beginPath();molX.moveTo(a.sx,a.sy);molX.lineTo(b.sx,b.sy);molX.stroke();
+    }
+  }
+  requestAnimationFrame(drawMol);
+}
+requestAnimationFrame(drawMol);
 
 /* =========================================================
    MECHANISM THEATRE
    ========================================================= */
 const STEPS=[
   {t:'Chromatin permissive',
-   d:'Nucleosomes are spaced; the H3 tail is unmodified at lysine 27. RNA polymerase II transcribes the gene.',
+   d:'Nucleosomes spaced, H3K27 unmodified, polymerase transcribing.',
    cite:'Baseline state. Nucleosome architecture: Luger et al., Nature 1997.',
    p:{comp:0,me:0,prc2:-1,cbx:0,inh:-1,pol:1,expr:.85,dim:0}},
   {t:'PRC2 engages the nucleosome',
-   d:'Polycomb repressive complex 2 — EZH2 with SUZ12 and EED — docks onto chromatin. EED binding to pre-existing H3K27me3 stimulates the complex.',
+   d:'PRC2 docks onto chromatin. EED binding existing H3K27me3 stimulates the complex.',
    cite:'PRC2 allosteric activation by H3K27me3 via EED: Margueron et al., Nature 2009.',
    p:{comp:0,me:0,prc2:1,cbx:0,inh:-1,pol:1,expr:.8,dim:0}},
   {t:'Methyl transfer',
-   d:'The SET domain transfers methyl groups from S-adenosylmethionine to H3 lysine 27, one at a time, to trimethylation.',
+   d:'The SET domain transfers methyl from SAM to H3K27, one at a time, to trimethylation.',
    cite:'EZH2 SET-domain catalysis and SAM dependence: Cao et al., Science 2002.',
    p:{comp:.08,me:3,prc2:1,cbx:0,inh:-1,pol:.85,expr:.6,dim:0}},
   {t:'The mark is read',
-   d:'Chromobox proteins in PRC1 recognise H3K27me3 and are recruited. Reading, not writing, is what converts a chemical tag into a physical outcome.',
+   d:'CBX proteins in PRC1 recognise the mark. Reading, not writing, turns a tag into an outcome.',
    cite:'CBX chromodomain recognition of H3K27me3: Fischle et al., Genes Dev 2003.',
    p:{comp:.45,me:3,prc2:1,cbx:1,inh:-1,pol:.4,expr:.3,dim:0}},
   {t:'Compaction and silencing',
-   d:'Chromatin compacts. Polymerase can no longer engage the promoter. In a differentiation-blocked tumour this is how a lineage programme is held shut.',
+   d:'Chromatin compacts and polymerase cannot engage. This is how a lineage programme is held shut.',
    cite:'PRC1-mediated chromatin compaction: Francis et al., Science 2004.',
    p:{comp:1,me:3,prc2:1,cbx:1,inh:-1,pol:0,expr:.04,dim:0}},
   {t:'Inhibitor occupies the site',
-   d:'A methyltransferase inhibitor binds the enzyme. Substrate-competitive compounds block the peptide groove; cofactor-competitive ones block the SAM pocket. Which one matters — they behave differently under substrate load.',
+   d:'Substrate-competitive inhibitors block the peptide groove; cofactor-competitive ones block the SAM pocket. The difference matters under substrate load.',
    cite:'Substrate- vs cofactor-competitive HKMT inhibition: Mol Cancer Ther 2022; Front Cell Dev Biol 2023.',
    p:{comp:1,me:3,prc2:1,cbx:1,inh:1,pol:0,expr:.04,dim:1}},
   {t:'The mark decays',
-   d:'No new methylation is deposited. Existing H3K27me3 is removed by KDM6 demethylases and diluted across cell divisions. This takes days, not minutes.',
+   d:'KDM6 demethylases remove the mark and cell division dilutes it. Days, not minutes.',
    cite:'KDM6A/UTX H3K27 demethylation: Agger et al., Nature 2007.',
    p:{comp:.55,me:0,prc2:1,cbx:0,inh:1,pol:.3,expr:.25,dim:1}},
   {t:'Re-expression and differentiation',
-   d:'Chromatin decompacts, polymerase re-engages, the silenced programme is transcribed. Whether the cell then differentiates is a separate question the map should not answer for you.',
+   d:'Chromatin opens and the programme is transcribed. Whether the cell differentiates is a separate question.',
    cite:'EZH2 inhibition promotes myogenic differentiation: BMC Cancer 2014; Clin Epigenetics 2023.',
    p:{comp:0,me:0,prc2:1,cbx:0,inh:1,pol:1,expr:.92,dim:1}},
 ];
